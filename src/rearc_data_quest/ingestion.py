@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 from urllib.parse import urljoin
@@ -17,6 +18,42 @@ from urllib.parse import urljoin
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Retry configuration
+MAX_RETRIES = 3
+INITIAL_BACKOFF = 1  # seconds
+MAX_BACKOFF = 10  # seconds
+RATE_LIMIT_DELAY = 0.5  # seconds between requests (be nice to servers)
+
+
+def retry_with_backoff(func, *args, max_retries=MAX_RETRIES, **kwargs):
+    """
+    Retry a function with exponential backoff.
+
+    Args:
+        func: Function to retry
+        max_retries: Maximum number of retry attempts
+        *args, **kwargs: Arguments to pass to func
+
+    Returns:
+        Result of successful function call
+
+    Raises:
+        Exception from last failed attempt
+    """
+    for attempt in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except (requests.exceptions.RequestException, ConnectionError) as e:
+            if attempt == max_retries - 1:
+                raise
+
+            backoff = min(INITIAL_BACKOFF * (2 ** attempt), MAX_BACKOFF)
+            logger.warning(
+                f"Attempt {attempt + 1}/{max_retries} failed: {e}. "
+                f"Retrying in {backoff}s..."
+            )
+            time.sleep(backoff)
 
 
 class IngestionTracker:
@@ -65,7 +102,7 @@ class BLSDataIngestion:
         """Parse HTML directory listing to get file URLs."""
         logger.info(f"Fetching directory listing from {self.bls_base_url}")
 
-        response = self.session.get(self.bls_base_url)
+        response = retry_with_backoff(self.session.get, self.bls_base_url)
         response.raise_for_status()
 
         pattern = r'<[Aa] [Hh][Rr][Ee][Ff]="([^"]+)"'
@@ -101,7 +138,10 @@ class BLSDataIngestion:
 
         for filename, url in file_links:
             try:
-                response = self.session.get(url)
+                # Rate limiting: be respectful to BLS servers
+                time.sleep(RATE_LIMIT_DELAY)
+
+                response = retry_with_backoff(self.session.get, url)
                 response.raise_for_status()
                 content = response.content
                 content_hash = tracker.compute_hash(content)
@@ -146,7 +186,7 @@ class PopulationDataIngestion:
 
     def fetch_population_data(self) -> Dict[str, Any]:
         logger.info(f"Fetching population data from API")
-        response = self.session.get(self.population_api_url)
+        response = retry_with_backoff(self.session.get, self.population_api_url)
         response.raise_for_status()
         data = response.json()
         logger.info(f"Fetched {len(data.get('data', []))} records")
