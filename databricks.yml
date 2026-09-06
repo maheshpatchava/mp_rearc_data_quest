@@ -18,14 +18,14 @@ variables:
     default: mp_rearc_bls_data
 
 targets:
-  lab:
+  dev:
     default: true
     mode: development
     workspace:
       host: "********"
     # Variables for lab jobs
     variables:
-      #git_branch: 'stage'
+      # volume_name: mp_rearc_bls_data
 
 
     
