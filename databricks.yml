@@ -1,0 +1,31 @@
+# This is a Databricks asset bundle definition for mp_rearc_data_quest.
+# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
+bundle:
+  name: mp_rearc_data_quest
+
+include:
+  - resources/*/*.yml
+
+variables:
+  catalog_name:
+    description: Unity Catalog name
+    default: "********"
+  schema_name:
+    description: Schema name for tables
+    default: "********"
+  volume_name:
+    description: Volume name for raw data
+    default: mp_rearc_bls_data
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      host: "********"
+    # Variables for lab jobs
+    variables:
+      # volume_name: mp_rearc_bls_data
+
+
+    

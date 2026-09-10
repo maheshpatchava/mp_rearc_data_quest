@@ -1,0 +1,59 @@
+resources:
+
+  # Schema Permissions
+#  schemas:
+#    rearc_data_quest_schema:
+#      name: "${var.schema_name}"
+#      catalog_name: "${var.catalog_name}"
+#      comment: "Schema for Rearc Data Quest pipeline (Bronze/Silver/Gold tables)"
+#      grants:
+#        - principal: "data_analysts"
+#          privileges: ["SELECT", "USE_SCHEMA"]
+
+  # DLT Pipeline for Bronze/Silver/Gold tables
+  pipelines:
+    bls_etl_pipeline:
+      name: "rearc-data-quest-dlt-pipeline-${bundle.target}"
+      catalog: "${var.catalog_name}"
+      target: "${var.schema_name}"
+      development: true
+      continuous: false
+      channel: CURRENT
+      serverless: true 
+
+      libraries:
+        - notebook:
+            path: ../../notebooks/rearc_data_quest/pipeline.ipynb
+
+      configuration:
+        catalog_name: "${var.catalog_name}"
+        schema_name: "${var.schema_name}"
+        volume_name: "${var.volume_name}"
+        bundle_source_path: "${workspace.file_path}/src"
+        use_sql: "false"  # Set to "true" to use Spark SQL, "false" for PySpark (primary)
+
+  # Jobs
+  jobs:
+
+    # Workflow: Ingestion → DLT Pipeline
+    rearc_data_quest_workflow:
+      name: "rearc-data-quest-full-workflow-${bundle.target}"
+
+      tasks:
+        - task_key: ingest_bls_population_data
+          notebook_task:
+            notebook_path: ../../notebooks/rearc_data_quest/ingestion.ipynb
+            base_parameters:
+              bundle_source_path: "${workspace.file_path}/src"
+              catalog_name: "${var.catalog_name}"
+              schema_name: "${var.schema_name}"
+              volume_name: "${var.volume_name}"
+
+        - task_key: bls_etl_pipeline
+          depends_on:
+            - task_key: ingest_bls_population_data
+
+          pipeline_task:
+            pipeline_id: "${resources.pipelines.bls_etl_pipeline.id}"
+
+      max_concurrent_runs: 1
